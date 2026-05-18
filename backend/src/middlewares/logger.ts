@@ -1,7 +1,6 @@
-// middlewares/logger.ts
-const winston = require("winston");
-const expressWinston = require("express-winston");
-const path = require("path");
+import winston from "winston";
+import expressWinston from "express-winston";
+import path from "path";
 
 export const requestLogger = expressWinston.logger({
   transports: [
