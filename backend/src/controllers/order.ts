@@ -3,32 +3,56 @@ import { faker } from '@faker-js/faker';
 import product from '../models/product';
 import BadRequestError from '../errors/bad-request-error';
 
-const createOrder = async (req: Request, res: Response, next: NextFunction) => {
-  const { items, total } = req.body;
-  const itemsInDb = await product.find({ _id: { $in: items } });
-  const calculatedTotal = itemsInDb.reduce((sum, p) => sum + (p.price || 0), 0);
+const createOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { items, total } = req.body;
 
-  if (!itemsInDb) {
-    return res.status(400).json({ message: 'Выбранные товары отсутствуют' });
+    const itemsInDb = await product.find({ _id: { $in: items } });
+
+    const invalidItem = itemsInDb.find((item) => item.price === null);
+
+    if (invalidItem) {
+      return next(
+        new BadRequestError(
+          `Товар с id ${invalidItem._id} не продается`
+        )
+      );
+    }
+
+    if (itemsInDb.length !== items.length) {
+      const foundIds = itemsInDb.map((p) => p._id.toString());
+
+      const notFoundIds = items.filter(
+        (id: string) => !foundIds.includes(id)
+      );
+
+      return next(
+        new BadRequestError(
+          `Следующие товары не найдены в базе: ${notFoundIds.join(', ')}`
+        )
+      );
+    }
+
+    const calculatedTotal = itemsInDb.reduce(
+      (sum, p) => sum + (p.price || 0),
+      0
+    );
+
+    if (calculatedTotal !== total) {
+      return next(new BadRequestError('Неверная сумма заказа'));
+    }
+
+    return res.status(200).send({
+      id: faker.string.ulid(),
+      total: calculatedTotal,
+    });
+  } catch (error) {
+    return next(error);
   }
-
-  const invalidItem = itemsInDb.find((item) => item.price === null);
-  if (invalidItem) {
-    return next(new BadRequestError(`Товар с id ${invalidItem._id} не продается`));
-  }
-
-  if (itemsInDb.length !== items.length) {
-    const foundIds = itemsInDb.map((p) => p._id.toString());
-    const notFoundIds = items.filter((id: string) => !foundIds.includes(id));
-
-    return next(new BadRequestError(`Следующие товары не найдены в базе: ${notFoundIds.join(', ')}`));
-  }
-
-  if (calculatedTotal !== total) {
-    return next(new BadRequestError('Неверная сумма заказа'));
-  }
-
-  return res.status(200).send({ id: faker.string.ulid(), total: calculatedTotal });
 };
 
 export default createOrder;
